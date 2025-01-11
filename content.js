@@ -385,7 +385,7 @@ async function getCommentaryFromLLM(imageData) {
   
   // Format recent comments for context
   const recentComments = commentHistory
-    .slice(-10)  // Get last 10 comments
+    .slice(-100)  // Get last 100 comments
     .map(comment => comment.replace(/^\[\d{1,2}:\d{1,2}:\d{1,2}\s[AP]M\]\s/, ''))  // Remove timestamps
     .join('\n- ');
   

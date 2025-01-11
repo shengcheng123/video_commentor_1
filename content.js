@@ -214,8 +214,31 @@ youtubeStyles.textContent = `
   .ytp-chrome-bottom {
     z-index: auto !important;
   }
+  /* Handle fullscreen mode */
+  *:fullscreen #movie_player,
+  *:-webkit-full-screen #movie_player,
+  *:-moz-full-screen #movie_player {
+    z-index: auto !important;
+  }
+  /* Ensure our overlay shows in fullscreen */
+  *:fullscreen ~ div,
+  *:-webkit-full-screen ~ div,
+  *:-moz-full-screen ~ div {
+    z-index: 9999999 !important;
+  }
 `;
 document.head.appendChild(youtubeStyles);
+
+// Move overlay to body when entering/exiting fullscreen
+document.addEventListener('fullscreenchange', () => {
+  if (document.fullscreenElement) {
+    document.fullscreenElement.appendChild(overlay);
+    document.fullscreenElement.appendChild(debugOverlay);
+  } else {
+    document.body.appendChild(overlay);
+    document.body.appendChild(debugOverlay);
+  }
+});
 
 async function captureVideoFrame() {
   // Try different selectors for various platforms

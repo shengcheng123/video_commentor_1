@@ -13,6 +13,45 @@ let debugInfo = {
   lastImageData: null
 };
 
+// Store page context for reuse
+let pageContext = {
+  title: '',
+  description: '',
+  platform: '',
+  timestamp: '',
+  url: ''
+};
+
+// Function to grab context from different platforms
+function grabPageContext() {
+  const hostname = window.location.hostname;
+  pageContext.url = window.location.href;
+  pageContext.timestamp = new Date().toISOString();
+
+  if (hostname.includes('youtube.com')) {
+    pageContext.platform = 'YouTube';
+    pageContext.title = document.querySelector('h1.ytd-video-primary-info-renderer')?.textContent?.trim() || '';
+    pageContext.description = document.querySelector('ytd-expander#description')?.textContent?.trim() || '';
+  } 
+  else if (hostname.includes('netflix.com')) {
+    pageContext.platform = 'Netflix';
+    pageContext.title = document.querySelector('.video-title')?.textContent?.trim() || 
+                       document.querySelector('.title-title')?.textContent?.trim() || '';
+    pageContext.description = document.querySelector('.video-synopsis')?.textContent?.trim() || 
+                             document.querySelector('.synopsis')?.textContent?.trim() || '';
+  }
+  else if (hostname.includes('bilibili.com')) {
+    pageContext.platform = 'Bilibili';
+    pageContext.title = document.querySelector('.video-title')?.textContent?.trim() || 
+                       document.querySelector('h1.title')?.textContent?.trim() || '';
+    pageContext.description = document.querySelector('.desc-info')?.textContent?.trim() || 
+                             document.querySelector('.video-desc')?.textContent?.trim() || '';
+  }
+
+  debugInfo.logs.push(`Grabbed page context: ${JSON.stringify(pageContext)}`);
+  updateDebugDisplay();
+}
+
 // Create overlay for comments
 const overlay = document.createElement('div');
 overlay.style.cssText = `
@@ -344,11 +383,23 @@ async function getCommentaryFromLLM(imageData) {
   debugInfo.status = 'calling API';
   updateDebugDisplay();
   
+  // Format recent comments for context
+  const recentComments = commentHistory
+    .slice(-10)  // Get last 10 comments
+    .map(comment => comment.replace(/^\[\d{1,2}:\d{1,2}:\d{1,2}\s[AP]M\]\s/, ''))  // Remove timestamps
+    .join('\n- ');
+  
   try {
     const requestBody = {
       contents: [{
         parts: [
-          { text: window.PROMPTS.default },
+          { 
+            text: `${window.PROMPTS.default}\n\n` +
+                  `Note: This is a ${pageContext.platform} video titled "${pageContext.title}". ` +
+                  `Focus on describing what's happening in the current frame.\n\n` +
+                  `Recent comments (for context, avoid repeating unless important):\n` +
+                  `- ${recentComments}`
+          },
           {
             inline_data: {
               mime_type: "image/jpeg",
@@ -358,8 +409,12 @@ async function getCommentaryFromLLM(imageData) {
         ]
       }],
       generationConfig: {
-        temperature: 0.4,
-        maxOutputTokens: 100
+        temperature: 0.7,
+        // Increase max tokens to account for longer context
+        maxOutputTokens: 150,
+        // Add parameters to encourage novelty
+        topP: 0.9,
+        topK: 40
       }
     };
     
@@ -502,6 +557,9 @@ function displayComment(comment) {
 }
 
 async function generateCommentary() {
+  // Grab latest context in case video changed
+  grabPageContext();
+  
   const imageData = await captureVideoFrame();
   if (!imageData) return;
   

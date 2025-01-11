@@ -9,7 +9,8 @@
     "storage"
   ],
   "host_permissions": [
-    "https://generativelanguage.googleapis.com/*"
+    "https://generativelanguage.googleapis.com/*",
+    "https://*.netflix.com/*"
   ],
   "action": {
     "default_popup": "popup.html"

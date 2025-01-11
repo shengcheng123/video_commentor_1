@@ -2,6 +2,8 @@ let commentaryInterval;
 let commentHistory = [];
 let nextScreenshotTime = null;
 let intervalSeconds = 10;  // Default interval
+let isPaused = false;
+let pausedTimeRemaining = 0;  // Store remaining time when paused
 let debugInfo = {
   lastCapture: null,
   apiCalls: 0,
@@ -95,6 +97,38 @@ screenshotBtn.onmouseover = () => screenshotBtn.style.opacity = '1';
 screenshotBtn.onmouseout = () => screenshotBtn.style.opacity = '0.7';
 screenshotBtn.onclick = () => generateCommentary();
 toolbar.appendChild(screenshotBtn);
+
+// Pause button
+const pauseBtn = document.createElement('button');
+pauseBtn.innerHTML = '⏸️';
+pauseBtn.style.cssText = `
+  background: none;
+  border: none;
+  color: white;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px 8px;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+`;
+pauseBtn.title = "Pause/Resume Screenshots";
+pauseBtn.onmouseover = () => pauseBtn.style.opacity = '1';
+pauseBtn.onmouseout = () => pauseBtn.style.opacity = '0.7';
+pauseBtn.onclick = () => {
+  isPaused = !isPaused;
+  pauseBtn.innerHTML = isPaused ? '▶️' : '⏸️';
+  pauseBtn.title = isPaused ? "Resume Screenshots" : "Pause Screenshots";
+  debugInfo.status = isPaused ? 'paused' : 'running';
+  if (isPaused) {
+    // Store remaining time when pausing
+    pausedTimeRemaining = Math.max(0, nextScreenshotTime - Date.now());
+  } else {
+    // When resuming, use the stored remaining time
+    nextScreenshotTime = Date.now() + pausedTimeRemaining;
+  }
+  updateDebugDisplay();
+};
+toolbar.insertBefore(pauseBtn, screenshotBtn);  // Insert before screenshot button
 
 // Clear button
 const clearBtn = document.createElement('button');
@@ -256,36 +290,51 @@ async function captureVideoFrame() {
     '.html5-main-video',       // YouTube main video
     '.bilibili-player-video video', // Bilibili video
     '#player_html5_api',       // Some other video players
-    '.video-stream'            // YouTube stream
+    '.video-stream',           // YouTube stream
+    '.VideoContainer video',    // Netflix main video
+    '.nf-player-container video', // Netflix alternate
+    '#netflix-player video'     // Netflix backup
   ].join(','));
   
   debugInfo.status = 'capturing frame';
   updateDebugDisplay();
   
   if (!video) {
-    debugInfo.errors.push('No video element found. Supported platforms: YouTube, Bilibili');
+    debugInfo.errors.push('No video element found. Supported platforms: YouTube, Bilibili, Netflix');
     updateDebugDisplay();
     return null;
   }
   
-  // Wait for video to be ready
-  if (!video.videoWidth || !video.videoHeight) {
-    debugInfo.errors.push('Video not ready yet, waiting for video to load');
+  // Special handling for Netflix
+  try {
+    if (window.location.hostname.includes('netflix.com')) {
+      // Force video to be visible for capture
+      video.style.visibility = 'visible';
+      video.style.opacity = '1';
+    }
+    
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    
+    // Reset Netflix video styles if needed
+    if (window.location.hostname.includes('netflix.com')) {
+      video.style.visibility = '';
+      video.style.opacity = '';
+    }
+    
+    debugInfo.lastCapture = new Date().toISOString();
+    debugInfo.lastImageData = canvas.toDataURL('image/jpeg', 0.8);
+    updateDebugDisplay();
+    return debugInfo.lastImageData;
+  } catch (error) {
+    debugInfo.errors.push(`Capture Error: ${error.message}`);
     updateDebugDisplay();
     return null;
   }
-  
-  const canvas = document.createElement('canvas');
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-  
-  const ctx = canvas.getContext('2d');
-  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-  
-  debugInfo.lastCapture = new Date().toISOString();
-  debugInfo.lastImageData = canvas.toDataURL('image/jpeg', 0.8);
-  updateDebugDisplay();
-  return debugInfo.lastImageData;
 }
 
 async function getCommentaryFromLLM(imageData) {
@@ -354,10 +403,9 @@ async function getCommentaryFromLLM(imageData) {
 }
 
 function updateDebugDisplay() {
-  // Calculate time remaining if nextScreenshotTime exists
   let timeRemaining = '';
   if (nextScreenshotTime) {
-    const remaining = Math.max(0, nextScreenshotTime - Date.now());
+    const remaining = isPaused ? pausedTimeRemaining : Math.max(0, nextScreenshotTime - Date.now());
     const seconds = Math.floor(remaining / 1000);
     timeRemaining = `Next screenshot in: ${seconds}s`;
     countdownDisplay.textContent = timeRemaining;
@@ -484,6 +532,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'startCommentary') {
     debugInfo.status = 'starting interval';
     debugInfo.errors = []; // Clear previous errors
+    isPaused = false;
+    pauseBtn.innerHTML = '⏸️';
     
     // Do first screenshot immediately
     generateCommentary();
@@ -492,9 +542,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     nextScreenshotTime = Date.now() + (intervalSeconds * 1000);
     
     commentaryInterval = setInterval(() => {
-      // Update next screenshot time before generating commentary
-      nextScreenshotTime = Date.now() + (intervalSeconds * 1000);
-      generateCommentary();
+      if (!isPaused) {
+        // Update next screenshot time before generating commentary
+        nextScreenshotTime = Date.now() + (intervalSeconds * 1000);
+        generateCommentary();
+      }
     }, intervalSeconds * 1000);
     
     // Start updating the countdown every second
@@ -518,6 +570,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     debugInfo.status = 'stopped';
     clearInterval(commentaryInterval);
     nextScreenshotTime = null;
+    isPaused = false;
+    pauseBtn.innerHTML = '⏸️';
     updateDebugDisplay();
   } else if (request.action === 'takeScreenshot') {
     debugInfo.status = 'manual screenshot';

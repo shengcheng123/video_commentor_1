@@ -3,4 +3,3 @@ node_modules/
 *.log
 .idea/
 .vscode/
-api_key.js 

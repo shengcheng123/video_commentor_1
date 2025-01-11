@@ -27,25 +27,49 @@ function grabPageContext() {
   const hostname = window.location.hostname;
   pageContext.url = window.location.href;
   pageContext.timestamp = new Date().toISOString();
+  pageContext.platform = hostname;  // Use hostname as platform name
 
-  if (hostname.includes('youtube.com')) {
-    pageContext.platform = 'YouTube';
-    pageContext.title = document.querySelector('h1.ytd-video-primary-info-renderer')?.textContent?.trim() || '';
-    pageContext.description = document.querySelector('ytd-expander#description')?.textContent?.trim() || '';
-  } 
-  else if (hostname.includes('netflix.com')) {
-    pageContext.platform = 'Netflix';
-    pageContext.title = document.querySelector('.video-title')?.textContent?.trim() || 
-                       document.querySelector('.title-title')?.textContent?.trim() || '';
-    pageContext.description = document.querySelector('.video-synopsis')?.textContent?.trim() || 
-                             document.querySelector('.synopsis')?.textContent?.trim() || '';
+  // Try to find video title and description using common selectors
+  const titleSelectors = [
+    'h1',                          // Common heading
+    'title',                       // Page title
+    '[class*="title"]',           // Classes containing "title"
+    '[id*="title"]',              // IDs containing "title"
+    'meta[property="og:title"]',   // OpenGraph title
+    'meta[name="title"]'          // Meta title
+  ];
+
+  const descriptionSelectors = [
+    'meta[name="description"]',    // Meta description
+    'meta[property="og:description"]', // OpenGraph description
+    '[class*="description"]',      // Classes containing "description"
+    '[id*="description"]',         // IDs containing "description"
+    '[class*="synopsis"]',         // Classes containing "synopsis"
+    '[class*="summary"]'           // Classes containing "summary"
+  ];
+
+  // Try each selector until we find something
+  for (const selector of titleSelectors) {
+    const element = document.querySelector(selector);
+    if (element) {
+      pageContext.title = element.textContent?.trim() || 
+                         element.getAttribute('content')?.trim() || '';
+      if (pageContext.title) break;
+    }
   }
-  else if (hostname.includes('bilibili.com')) {
-    pageContext.platform = 'Bilibili';
-    pageContext.title = document.querySelector('.video-title')?.textContent?.trim() || 
-                       document.querySelector('h1.title')?.textContent?.trim() || '';
-    pageContext.description = document.querySelector('.desc-info')?.textContent?.trim() || 
-                             document.querySelector('.video-desc')?.textContent?.trim() || '';
+
+  for (const selector of descriptionSelectors) {
+    const element = document.querySelector(selector);
+    if (element) {
+      pageContext.description = element.textContent?.trim() || 
+                                element.getAttribute('content')?.trim() || '';
+      if (pageContext.description) break;
+    }
+  }
+
+  // Fallback to page title if no title found
+  if (!pageContext.title) {
+    pageContext.title = document.title;
   }
 
   debugInfo.logs.push(`Grabbed page context: ${JSON.stringify(pageContext)}`);
@@ -326,20 +350,26 @@ async function captureVideoFrame() {
   // Try different selectors for various platforms
   const video = document.querySelector([
     'video',                    // Generic video
+    'video[src]',              // Video with src attribute
+    'video source',            // Video with source element
     '.html5-main-video',       // YouTube main video
     '.bilibili-player-video video', // Bilibili video
     '#player_html5_api',       // Some other video players
     '.video-stream',           // YouTube stream
     '.VideoContainer video',    // Netflix main video
     '.nf-player-container video', // Netflix alternate
-    '#netflix-player video'     // Netflix backup
+    '#netflix-player video',    // Netflix backup
+    'video[class*="player"]',   // Generic player classes
+    'video[id*="player"]',      // Generic player IDs
+    'video[class*="video"]',    // Generic video classes
+    'video[id*="video"]'        // Generic video IDs
   ].join(','));
   
   debugInfo.status = 'capturing frame';
   updateDebugDisplay();
   
   if (!video) {
-    debugInfo.errors.push('No video element found. Supported platforms: YouTube, Bilibili, Netflix');
+    debugInfo.errors.push('No video element found on this page. Try playing a video first.');
     updateDebugDisplay();
     return null;
   }

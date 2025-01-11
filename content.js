@@ -20,16 +20,12 @@ overlay.style.cssText = `
   width: 300px;
   background: rgba(0, 0, 0, 0.9);
   color: white;
-  padding: 15px;
+  padding: 0;
   border-radius: 8px 0 0 8px;
   z-index: 9999999;
   height: 500px;
-  overflow-y: auto;
-  overflow-x: hidden;
-  scrollbar-width: thin;
-  scrollbar-color: #666 #333;
+  overflow: hidden;
   font-size: 16px;
-  scroll-behavior: smooth;
   resize: both;
   min-width: 200px;
   min-height: 300px;
@@ -42,11 +38,14 @@ overlay.style.cssText = `
 const overlayContent = document.createElement('div');
 overlayContent.style.cssText = `
   direction: ltr;
-  margin-top: 40px;  // Space for toolbar
-  overflow-y: auto;
   height: calc(100% - 40px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 15px;
+  padding-top: 55px;
+  scrollbar-width: thin;
+  scrollbar-color: #666 #333;
 `;
-overlay.appendChild(overlayContent);
 
 // Add toolbar
 const toolbar = document.createElement('div');
@@ -57,13 +56,15 @@ toolbar.style.cssText = `
   left: 0;
   right: 0;
   height: 40px;
-  background: rgba(0, 0, 0, 0.8);
+  background: rgba(0, 0, 0, 0.9);
   border-bottom: 1px solid #444;
   display: flex;
   align-items: center;
   padding: 0 10px;
   gap: 10px;
-  z-index: 1;  // Ensure toolbar stays above content
+  z-index: 2;
+  cursor: move;
+  user-select: none;
 `;
 
 // Countdown display
@@ -72,6 +73,7 @@ countdownDisplay.style.cssText = `
   color: #888;
   font-size: 14px;
   flex: 1;
+  user-select: none;
 `;
 toolbar.appendChild(countdownDisplay);
 
@@ -140,7 +142,9 @@ debugBtn.onmouseover = () => debugBtn.style.opacity = '1';
 debugBtn.onmouseout = () => debugBtn.style.opacity = '0.7';
 toolbar.appendChild(debugBtn);
 
+// Add elements in correct order
 overlay.appendChild(toolbar);
+overlay.appendChild(overlayContent);
 
 // Load saved size
 chrome.storage.local.get(['overlayWidth', 'overlayHeight'], (result) => {
@@ -156,6 +160,11 @@ overlay.addEventListener('mouseup', () => {
     chrome.storage.local.set({
       overlayWidth: overlay.offsetWidth,
       overlayHeight: overlay.offsetHeight
+    });
+    // Scroll to bottom after resize
+    overlayContent.scrollTo({ 
+      top: overlayContent.scrollHeight, 
+      behavior: 'smooth' 
     });
   }, 500);
 });
@@ -429,13 +438,14 @@ function displayComment(comment) {
   commentElement.style.marginBottom = '15px';
   overlayContent.appendChild(commentElement);
   
-  // Smooth scroll to bottom with a delay
-  setTimeout(() => {
-    overlayContent.scrollTo({ 
-      top: overlay.scrollHeight, 
-      behavior: 'smooth' 
+  // Improved scroll behavior
+  requestAnimationFrame(() => {
+    const scrollTarget = overlayContent.scrollHeight - overlayContent.clientHeight;
+    overlayContent.scrollTo({
+      top: scrollTarget,
+      behavior: 'smooth'
     });
-  }, 100);
+  });
   
   // Keep only last 5 comments
   while (overlayContent.children.length > 5) {
@@ -542,3 +552,67 @@ chrome.storage.local.get('debugVisible', (result) => {
 const saveDebugState = () => {
   chrome.storage.local.set({ debugVisible });
 }; 
+
+// Add drag functionality
+let isDragging = false;
+let currentX;
+let currentY;
+let initialX;
+let initialY;
+let xOffset = 0;
+let yOffset = 0;
+
+toolbar.addEventListener('mousedown', dragStart);
+document.addEventListener('mousemove', drag);
+document.addEventListener('mouseup', dragEnd);
+
+function dragStart(e) {
+  if (e.target === toolbar || e.target === countdownDisplay) {  // Allow dragging from toolbar and countdown
+    initialX = e.clientX - xOffset;
+    initialY = e.clientY - yOffset;
+    isDragging = true;
+    toolbar.style.cursor = 'grabbing';
+  }
+}
+
+function drag(e) {
+  if (isDragging) {
+    e.preventDefault();
+    currentX = e.clientX - initialX;
+    currentY = e.clientY - initialY;
+    xOffset = currentX;
+    yOffset = currentY;
+    
+    overlay.style.transform = `translate(${currentX}px, ${currentY}px)`;
+    savePosition();  // Save position while dragging
+  }
+}
+
+function dragEnd(e) {
+  initialX = currentX;
+  initialY = currentY;
+  isDragging = false;
+  toolbar.style.cursor = 'move';
+  savePosition();  // Save final position
+}
+
+// Save position when window is moved
+let moveTimeout;
+function savePosition() {
+  clearTimeout(moveTimeout);
+  moveTimeout = setTimeout(() => {
+    chrome.storage.local.set({
+      overlayX: xOffset,
+      overlayY: yOffset
+    });
+  }, 500);
+}
+
+// Load saved position
+chrome.storage.local.get(['overlayX', 'overlayY'], (result) => {
+  if (result.overlayX !== undefined && result.overlayY !== undefined) {
+    xOffset = result.overlayX;
+    yOffset = result.overlayY;
+    overlay.style.transform = `translate(${xOffset}px, ${yOffset}px)`;
+  }
+}); 

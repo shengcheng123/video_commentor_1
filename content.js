@@ -348,13 +348,20 @@ document.addEventListener('fullscreenchange', () => {
 
 // Store Netflix stream for reuse
 let netflixStream = null;
+// Store Disney+ stream for reuse
+let disneyStream = null;
 
 async function captureVideoFrame() {
-  // For Netflix, capture the whole tab
-  if (window.location.hostname.includes('netflix.com')) {
+  // For Netflix and Disney+, capture the whole tab
+  if (window.location.hostname.includes('netflix.com') || 
+      window.location.hostname.includes('disneyplus.com')) {
+    // Choose which stream to use
+    const isNetflix = window.location.hostname.includes('netflix.com');
+    let streamRef = isNetflix ? netflixStream : disneyStream;
+
     try {
       // Reuse existing stream if available
-      if (!netflixStream) {
+      if (!streamRef) {
         const stream = await navigator.mediaDevices.getDisplayMedia({
           video: {
             displaySurface: "browser",
@@ -365,12 +372,17 @@ async function captureVideoFrame() {
           surfaceSwitching: "include",
           systemAudio: "exclude"
         });
-        netflixStream = stream;
+        streamRef = stream;
+        if (isNetflix) {
+          netflixStream = stream;
+        } else {
+          disneyStream = stream;
+        }
       }
 
       // Create video element to capture the stream
       const videoEl = document.createElement('video');
-      videoEl.srcObject = netflixStream;
+      videoEl.srcObject = streamRef;
       
       // Return a promise that resolves when the video can play
       await new Promise((resolve) => {
@@ -400,11 +412,15 @@ async function captureVideoFrame() {
       return dataUrl;
     } catch (error) {
       // Clear stored stream on error
-      if (netflixStream) {
-        netflixStream.getTracks().forEach(track => track.stop());
-        netflixStream = null;
+      if (streamRef) {
+        streamRef.getTracks().forEach(track => track.stop());
+        if (isNetflix) {
+          netflixStream = null;
+        } else {
+          disneyStream = null;
+        }
       }
-      debugInfo.errors.push(`Netflix capture error: ${error.message}`);
+      debugInfo.errors.push(`${isNetflix ? 'Netflix' : 'Disney+'} capture error: ${error.message}`);
       updateDebugDisplay();
       return null;
     }
@@ -707,6 +723,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     nextScreenshotTime = null;
     isPaused = false;
     pauseBtn.innerHTML = '⏸️';
+    // Clean up streams
+    if (netflixStream) {
+      netflixStream.getTracks().forEach(track => track.stop());
+      netflixStream = null;
+    }
+    if (disneyStream) {
+      disneyStream.getTracks().forEach(track => track.stop());
+      disneyStream = null;
+    }
     updateDebugDisplay();
   } else if (request.action === 'takeScreenshot') {
     debugInfo.status = 'manual screenshot';

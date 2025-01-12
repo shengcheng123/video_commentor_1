@@ -346,8 +346,71 @@ document.addEventListener('fullscreenchange', () => {
   }
 });
 
+// Store Netflix stream for reuse
+let netflixStream = null;
+
 async function captureVideoFrame() {
-  // Try different selectors for various platforms
+  // For Netflix, capture the whole tab
+  if (window.location.hostname.includes('netflix.com')) {
+    try {
+      // Reuse existing stream if available
+      if (!netflixStream) {
+        const stream = await navigator.mediaDevices.getDisplayMedia({
+          video: {
+            displaySurface: "browser",
+            cursor: "never"
+          },
+          audio: false,
+          selfBrowserSurface: "include",
+          surfaceSwitching: "include",
+          systemAudio: "exclude"
+        });
+        netflixStream = stream;
+      }
+
+      // Create video element to capture the stream
+      const videoEl = document.createElement('video');
+      videoEl.srcObject = netflixStream;
+      
+      // Return a promise that resolves when the video can play
+      await new Promise((resolve) => {
+        videoEl.onloadedmetadata = () => {
+          videoEl.play().then(resolve);
+        };
+      });
+      
+      // Create canvas with the same dimensions
+      const canvas = document.createElement('canvas');
+      canvas.width = videoEl.videoWidth;
+      canvas.height = videoEl.videoHeight;
+      
+      // Draw the current frame
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+      
+      // Clean up video element but keep the stream
+      videoEl.srcObject = null;
+      
+      // Convert to data URL
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+      
+      debugInfo.lastCapture = new Date().toISOString();
+      debugInfo.lastImageData = dataUrl;
+      updateDebugDisplay();
+      return dataUrl;
+    } catch (error) {
+      // Clear stored stream on error
+      if (netflixStream) {
+        netflixStream.getTracks().forEach(track => track.stop());
+        netflixStream = null;
+      }
+      debugInfo.errors.push(`Netflix capture error: ${error.message}`);
+      updateDebugDisplay();
+      return null;
+    }
+  }
+
+  // For non-Netflix platforms, use the video element capture method
   const video = document.querySelector([
     'video',                    // Generic video
     'video[src]',              // Video with src attribute
@@ -356,9 +419,6 @@ async function captureVideoFrame() {
     '.bilibili-player-video video', // Bilibili video
     '#player_html5_api',       // Some other video players
     '.video-stream',           // YouTube stream
-    '.VideoContainer video',    // Netflix main video
-    '.nf-player-container video', // Netflix alternate
-    '#netflix-player video',    // Netflix backup
     'video[class*="player"]',   // Generic player classes
     'video[id*="player"]',      // Generic player IDs
     'video[class*="video"]',    // Generic video classes
@@ -374,26 +434,13 @@ async function captureVideoFrame() {
     return null;
   }
   
-  // Special handling for Netflix
   try {
-    if (window.location.hostname.includes('netflix.com')) {
-      // Force video to be visible for capture
-      video.style.visibility = 'visible';
-      video.style.opacity = '1';
-    }
-    
     const canvas = document.createElement('canvas');
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     
     const ctx = canvas.getContext('2d');
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    
-    // Reset Netflix video styles if needed
-    if (window.location.hostname.includes('netflix.com')) {
-      video.style.visibility = '';
-      video.style.opacity = '';
-    }
     
     debugInfo.lastCapture = new Date().toISOString();
     debugInfo.lastImageData = canvas.toDataURL('image/jpeg', 0.8);

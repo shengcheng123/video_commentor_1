@@ -63,4 +63,26 @@ document.getElementById('screenshotBtn').addEventListener('click', () => {
       console.error('Failed to inject content script:', err);
     });
   });
+});
+
+// Listen for debug updates from content script
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.action === 'debugUpdate') {
+    const debugDiv = document.getElementById('debugText');
+    debugDiv.innerHTML = `
+      Status: ${request.debug.status}<br>
+      Last Capture: ${request.debug.lastCapture || 'none'}<br>
+      API Calls: ${request.debug.apiCalls}<br>
+      ${request.debug.errors.length ? '<span style="color: #ff6666">Errors: ' + request.debug.errors.slice(-1) + '</span>' : ''}
+    `;
+    
+    // Update screenshot preview if available
+    const screenshotPreview = document.getElementById('screenshotPreview');
+    if (request.debug.lastImageData) {
+      screenshotPreview.src = request.debug.lastImageData;
+      screenshotPreview.style.display = 'block';
+    } else {
+      screenshotPreview.style.display = 'none';
+    }
+  }
 }); 

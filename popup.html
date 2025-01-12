@@ -22,6 +22,27 @@
       <input type="number" id="intervalInput" value="10" min="5" max="60" style="width: 60px;">
     </label>
   </div>
+  <div id="debugInfo" style="
+    margin-top: 15px;
+    padding: 10px;
+    background: #333;
+    color: #00ff00;
+    font-family: monospace;
+    font-size: 12px;
+    border-radius: 4px;
+  ">
+    <div id="debugText"></div>
+    <div id="debugImage" style="margin-top: 10px;">
+      <img id="screenshotPreview" style="
+        width: 100%;
+        max-height: 150px;
+        object-fit: contain;
+        background: #222;
+        border: 1px solid #444;
+        display: none;
+      "/>
+    </div>
+  </div>
   <script src="popup.js"></script>
 </body>
 </html> 

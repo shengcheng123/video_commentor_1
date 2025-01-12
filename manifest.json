@@ -11,7 +11,8 @@
   "host_permissions": [
     "https://generativelanguage.googleapis.com/*",
     "https://*.netflix.com/*",
-    "https://*.safeshare.tv/*"
+    "https://*.safeshare.tv/*",
+    "https://*.nsfwyoutube.com/*"
   ],
   "action": {
     "default_popup": "popup.html"

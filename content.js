@@ -287,7 +287,7 @@ debugOverlay.style.cssText = `
   overflow-x: hidden;
   scrollbar-width: thin;
   scrollbar-color: #666 #333;
-  display: none;  // Hidden by default
+  display: block;  // Show by default
 `;
 document.body.appendChild(debugOverlay);
 
@@ -352,14 +352,20 @@ let netflixStream = null;
 let disneyStream = null;
 // Store SafeShare stream for reuse
 let safeshareStream = null;
+// Store NSFWYoutube stream for reuse
+let nsfwytStream = null;
 
 async function captureVideoFrame() {
-  // For Safeshare.tv in iframe
-  if (window.location.hostname.includes('safeshare.tv')) {
+  // For Safeshare.tv and NSFWYoutube in iframe
+  if (window.location.hostname.includes('safeshare.tv') || 
+      window.location.hostname.includes('nsfwyoutube.com')) {
+    const isNSFW = window.location.hostname.includes('nsfwyoutube.com');
+    let streamRef = isNSFW ? nsfwytStream : safeshareStream;
+
     try {
       // Reuse existing stream if available
-      if (!safeshareStream) {
-        safeshareStream = await navigator.mediaDevices.getDisplayMedia({
+      if (!streamRef) {
+        const stream = await navigator.mediaDevices.getDisplayMedia({
           video: {
             displaySurface: "browser",
             cursor: "never"
@@ -369,11 +375,17 @@ async function captureVideoFrame() {
           surfaceSwitching: "include",
           systemAudio: "exclude"
         });
+        streamRef = stream;
+        if (isNSFW) {
+          nsfwytStream = stream;
+        } else {
+          safeshareStream = stream;
+        }
       }
       
       // Create video element to capture the stream
       const videoEl = document.createElement('video');
-      videoEl.srcObject = safeshareStream;
+      videoEl.srcObject = streamRef;
       
       // Wait for video to be ready
       await new Promise((resolve) => {
@@ -403,11 +415,15 @@ async function captureVideoFrame() {
       return dataUrl;
     } catch (error) {
       // Clear stored stream on error
-      if (safeshareStream) {
-        safeshareStream.getTracks().forEach(track => track.stop());
-        safeshareStream = null;
+      if (streamRef) {
+        streamRef.getTracks().forEach(track => track.stop());
+        if (isNSFW) {
+          nsfwytStream = null;
+        } else {
+          safeshareStream = null;
+        }
       }
-      debugInfo.errors.push(`Safeshare capture error: ${error.message}`);
+      debugInfo.errors.push(`${isNSFW ? 'NSFWYoutube' : 'Safeshare'} capture error: ${error.message}`);
       updateDebugDisplay();
       return null;
     }
@@ -651,7 +667,9 @@ ${commentHistory.join('\n')}
             object-fit: contain; 
             background: #222;
             border: 1px solid #444;
+            display: block;
           "
+          alt="Latest screenshot"
         />
       </div>
     ` : ''}
@@ -686,6 +704,18 @@ ${commentHistory.join('\n')}
       </button>
     </div>
   `;
+
+  // Send debug info to popup
+  chrome.runtime.sendMessage({
+    action: 'debugUpdate',
+    debug: {
+      status: debugInfo.status,
+      lastCapture: debugInfo.lastCapture,
+      apiCalls: debugInfo.apiCalls,
+      errors: debugInfo.errors,
+      lastImageData: debugInfo.lastImageData
+    }
+  });
 }
 
 function displayComment(comment) {
@@ -799,6 +829,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (safeshareStream) {
       safeshareStream.getTracks().forEach(track => track.stop());
       safeshareStream = null;
+    }
+    if (nsfwytStream) {
+      nsfwytStream.getTracks().forEach(track => track.stop());
+      nsfwytStream = null;
     }
     updateDebugDisplay();
   } else if (request.action === 'takeScreenshot') {

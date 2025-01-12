@@ -14,15 +14,17 @@ A Chrome extension that uses Gemini AI to generate real-time commentary for vide
 - ✅ Netflix (requires tab sharing permission once per session)
 - ✅ Disney+ (requires tab sharing permission once per session)
 - ✅ SafeShare.tv (requires tab sharing permission once per session)
+- ✅ NSFWYoutube.com (requires tab sharing permission once per session)
 - ❌ YouTube (due to platform restrictions - please use SafeShare.tv instead)
 - ✅ Other video platforms
 
 ## Using with YouTube Videos
 Due to YouTube's platform restrictions, direct YouTube support is not available. However, you can:
 1. Copy your YouTube video URL
-2. Go to [SafeShare.tv](https://safeshare.tv)
-3. Paste the YouTube URL to create a SafeShare version
-4. Use the extension with the SafeShare version
+2. Use one of these alternatives:
+   - Go to [SafeShare.tv](https://safeshare.tv) and paste the URL
+   - Go to [NSFWYoutube.com](https://nsfwyoutube.com) and paste the URL
+3. Use the extension with the converted version
 
 ## Setup
 1. Clone this repository

@@ -350,8 +350,69 @@ document.addEventListener('fullscreenchange', () => {
 let netflixStream = null;
 // Store Disney+ stream for reuse
 let disneyStream = null;
+// Store SafeShare stream for reuse
+let safeshareStream = null;
 
 async function captureVideoFrame() {
+  // For Safeshare.tv in iframe
+  if (window.location.hostname.includes('safeshare.tv')) {
+    try {
+      // Reuse existing stream if available
+      if (!safeshareStream) {
+        safeshareStream = await navigator.mediaDevices.getDisplayMedia({
+          video: {
+            displaySurface: "browser",
+            cursor: "never"
+          },
+          audio: false,
+          selfBrowserSurface: "include",
+          surfaceSwitching: "include",
+          systemAudio: "exclude"
+        });
+      }
+      
+      // Create video element to capture the stream
+      const videoEl = document.createElement('video');
+      videoEl.srcObject = safeshareStream;
+      
+      // Wait for video to be ready
+      await new Promise((resolve) => {
+        videoEl.onloadedmetadata = () => {
+          videoEl.play().then(resolve);
+        };
+      });
+      
+      // Create canvas with the same dimensions
+      const canvas = document.createElement('canvas');
+      canvas.width = videoEl.videoWidth;
+      canvas.height = videoEl.videoHeight;
+      
+      // Draw the current frame
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+      
+      // Clean up video element but keep the stream
+      videoEl.srcObject = null;
+      
+      // Convert to data URL
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+      
+      debugInfo.lastCapture = new Date().toISOString();
+      debugInfo.lastImageData = dataUrl;
+      updateDebugDisplay();
+      return dataUrl;
+    } catch (error) {
+      // Clear stored stream on error
+      if (safeshareStream) {
+        safeshareStream.getTracks().forEach(track => track.stop());
+        safeshareStream = null;
+      }
+      debugInfo.errors.push(`Safeshare capture error: ${error.message}`);
+      updateDebugDisplay();
+      return null;
+    }
+  }
+
   // For Netflix and Disney+, capture the whole tab
   if (window.location.hostname.includes('netflix.com') || 
       window.location.hostname.includes('disneyplus.com')) {
@@ -435,6 +496,9 @@ async function captureVideoFrame() {
     '.bilibili-player-video video', // Bilibili video
     '#player_html5_api',       // Some other video players
     '.video-stream',           // YouTube stream
+    '#safeshare_video',        // Safeshare.tv main video
+    '#safeshare-player video', // Safeshare.tv alternate
+    'iframe[src*="safeshare.tv"] video', // Safeshare.tv embedded
     'video[class*="player"]',   // Generic player classes
     'video[id*="player"]',      // Generic player IDs
     'video[class*="video"]',    // Generic video classes
@@ -731,6 +795,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (disneyStream) {
       disneyStream.getTracks().forEach(track => track.stop());
       disneyStream = null;
+    }
+    if (safeshareStream) {
+      safeshareStream.getTracks().forEach(track => track.stop());
+      safeshareStream = null;
     }
     updateDebugDisplay();
   } else if (request.action === 'takeScreenshot') {

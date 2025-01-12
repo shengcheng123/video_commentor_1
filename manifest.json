@@ -10,7 +10,8 @@
   ],
   "host_permissions": [
     "https://generativelanguage.googleapis.com/*",
-    "https://*.netflix.com/*"
+    "https://*.netflix.com/*",
+    "https://*.safeshare.tv/*"
   ],
   "action": {
     "default_popup": "popup.html"
